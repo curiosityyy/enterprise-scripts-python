@@ -17,9 +17,9 @@ args = parser.parse_args()
 USERNAME = os.getenv("USERNAME") + "@kaito.ai"
 PASSWORD = os.getenv("PASSWORD")
 ACCOUNT_NAME = os.getenv("ACCOUNT_NAME")
-ENDPOINT_LABEL = os.getenv("POWERTRACK_LABEL")
+ENDPOINT_LABEL = "replay"
 
-domain = "https://gnip-stream.twitter.com/stream"
+domain = "https://gnip-stream.twitter.com/replay"
 
 endpoint = f"{domain}/powertrack/accounts/{ACCOUNT_NAME}/publishers/twitter/{ENDPOINT_LABEL}.json"
 
@@ -47,6 +47,7 @@ def main():
 def get_stream(endpoint, chunksize):
     print(USERNAME, PASSWORD)
     response = requests.get(url=endpoint, auth=(USERNAME, PASSWORD), stream=True, headers=headers)
+    print(response)
     for chunk in response.iter_content(chunksize, decode_unicode=True):  # Content gets decoded
         if "\n" or "\r" in chunk:  # Handles keep-alive new lines
             print(chunk)  # Prints keep-alive signal to stdout

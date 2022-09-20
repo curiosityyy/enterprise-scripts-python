@@ -1,6 +1,5 @@
 {
-  "query": "from:TwitterDev",
-  "maxResults": "10",
-  "fromDate": "202101010000",
-  "toDate": "202102010000"
+  "query": "from:lbycuriosity",
+  "fromDate": "202201010000",
+  "toDate": "202209150000"
 }

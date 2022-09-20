@@ -12,36 +12,28 @@ load_dotenv(verbose=True)  # Throws error if it can't find .env file
 
 # Argparse for cli options. Run `python engagement_totals.py -h` to see list of available arguments.
 parser = argparse.ArgumentParser()
-parser.add_argument("-r", "--rule_value", required=True, help="Add one or more rules to your stream.")
+parser.add_argument("-i", "--ids", nargs='+', required=True, help="Delete one or more rules by ID.")
 args = parser.parse_args()
 
-USERNAME = os.getenv("USERNAME") + "@kaito.ai"
+USERNAME = os.getenv("USERNAME")
 PASSWORD = os.getenv("PASSWORD")
 ACCOUNT_NAME = os.getenv("ACCOUNT_NAME")
 ENDPOINT_LABEL = os.getenv("POWERTRACK_LABEL")
 
 domain = "https://gnip-api.twitter.com/rules"
 
-endpoint = f"{domain}/powertrack/accounts/{ACCOUNT_NAME}/publishers/twitter/{ENDPOINT_LABEL}.json"
+endpoint = f"{domain}/powertrack/accounts/{ACCOUNT_NAME}/publishers/twitter/{ENDPOINT_LABEL}.json?_method=delete"
 
 
 def main():
-    rules = {"rules": [{"value": "rule1", "tag": "tag1"}]}
-    rules.update(rules=[{"value": args.rule_value}])
+    rule_ids = {"rule_ids": args.ids}
     try:
-        response = requests.post(url=endpoint, auth=(USERNAME, PASSWORD), json=rules)
+        response = requests.post(url=endpoint, auth=(USERNAME, PASSWORD), json=rule_ids)
     except requests.exceptions.RequestException as e:
         print(e)
         sys.exit(120)
 
     print(f"Status: {response.status_code}\n", format_response(response))
-
-
-def add_rule(endpoint, rules):
-    # The json param in the request sets the Content-Type in the header to 'application/json'
-    response = requests.post(url=endpoint, auth=(USERNAME, PASSWORD), json=rules)
-
-    return response
 
 
 def format_response(response):

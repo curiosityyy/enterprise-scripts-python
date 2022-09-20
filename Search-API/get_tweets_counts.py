@@ -1,4 +1,5 @@
 # Enterprise Search Tweets - Make a data or counts request against 30-day or Full-Archive Search
+import time
 import argparse
 import json
 import os
@@ -49,29 +50,32 @@ ARCHIVE = args.search_archive
 ENDPOINT_LABEL = args.search_label
 
 
-def main():
+def main(query, file):
     endpoint = determine_endpoint()
     # Build request body from file if it exists, else use cli args
-    if args.request_file is True:
-        request_body = build_request_from_file("request.json")
-    else:
-        request_body = build_request_body(args.query)
+    request_body = build_request_body(query)
     # Make the first request
     try:
         first_response = requests.post(url=endpoint, auth=(USERNAME, PASSWORD), json=request_body)
     except requests.exceptions.RequestException as e:
         print(e)
-        sys.exit(120)
-    print(f"Status: {first_response.status_code}\n", format_response(first_response), "\n")
+        return main(query, file)
+    print(f"Status: {first_response.status_code}\n")
+    if first_response.status_code == 429:
+        print(f"TooManyRequests, sleeping for 1 minutes")
+        time.sleep(60)
+        return main(query, file)
+
     json_response = (json.loads(first_response.text))
-    print(json_response.get('results'))
+    file.write(first_response.text + '\n')
+    total_count = json_response.get('totalCount')
 
     # Pagination logic (if -n flag is passed, paginate through the results)
     if json_response.get("next") is None or args.next is False:
         print(f"Request complete.")
     elif json_response.get("next") is not None and args.next:
         next_token = json_response.get("next")
-        request_count = 1  # Keep track of the number of requests being made (pagination) 
+        request_count = 1  # Keep track of the number of requests being made (pagination)
         while next_token is not None:
             # Update request_body with next token
             request_body.update(next=next_token)
@@ -80,22 +84,29 @@ def main():
                 response = requests.post(url=endpoint, auth=(USERNAME, PASSWORD), json=request_body)
             except requests.exceptions.RequestException as e:
                 print(e)
-                sys.exit(120)
-            print(format_response(response), "\n")
+                return main(query, file)
+
+            print(f"Status: {response.status_code}\n")
+            if response.status_code == 429:
+                print(f"TooManyRequests, sleeping for 1 minutes")
+                time.sleep(60)
+                continue
+
             # Parse n response and it's 'next' token
             n_response = (json.loads(response.text))
+            file.write(response.text + '\n')
+            total_count += n_response.get('totalCount')
             next_token = n_response.get("next")
             request_count += 1  # Iterates the request counter
 
         print(f"Done paginating.\nTotal requests made: {request_count}")
+    print(f"Total count: {total_count}")
+    return total_count
 
 
 def determine_endpoint():
     domain = "https://gnip-api.twitter.com"
-    if args.counts:
-        endpoint = f"{domain}/search/{ARCHIVE}/accounts/{ACCOUNT_NAME}/{ENDPOINT_LABEL}/counts.json"
-    else:
-        endpoint = f"{domain}/search/{ARCHIVE}/accounts/{ACCOUNT_NAME}/{ENDPOINT_LABEL}.json"
+    endpoint = f"{domain}/search/{ARCHIVE}/accounts/{ACCOUNT_NAME}/{ENDPOINT_LABEL}/counts.json"
 
     print(f"Endpoint: {endpoint}")
     return endpoint
@@ -132,5 +143,47 @@ def format_response(response):
     return formatted_response
 
 
-if __name__ == '__main__':
-    main()
+def read_twitter_user_details():
+    n_batch = 0
+    n_user = 0
+    state_file = open("states.txt", "r")
+    total_tweets = 0
+    start_idx = len(state_file.readlines())
+    state_file.close()
+    print("Starting at index: " + str(start_idx))
+    state_file = open("states.txt", "a")
+    with open("twitter_user_details.json", "r") as read_file:
+        batch = []
+        for line in read_file.readlines():
+            twitter_user = json.loads(line)
+            n_user += 1
+            batch.append("from:" + twitter_user.get('id'))
+            if n_user % 10 == 0:
+                query = ' OR '.join(batch)
+                batch = []
+                n_batch += 1
+                if n_batch < start_idx:
+                    continue
+                if n_batch > 1:
+                    break
+                result_file = open(f"tweet_count_batch_{str(n_batch)}", "a")
+                print("Starting get counts of " + str(n_batch) + "th user")
+                print(query)
+                user_tweet_count = main(query, result_file)
+                total_tweets += user_tweet_count
+                state_file.write(str(batch) + '\n')
+        if len(batch) > 0:
+            query = ' OR '.join(batch)
+            batch = []
+            n_batch += 1
+            if n_batch >= start_idx:
+                result_file = open(f"tweet_count_batch_{str(n_batch)}", "a")
+                print("Starting get counts of " + str(n_batch) + "th user")
+                print(query)
+                user_tweet_count = main(query, result_file)
+                total_tweets += user_tweet_count
+                state_file.write(str(batch) + '\n')
+        print(f"Total users: {n_user}, Total tweets: {total_tweets}")
+
+
+read_twitter_user_details()
